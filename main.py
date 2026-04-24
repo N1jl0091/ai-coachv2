@@ -25,8 +25,9 @@ async def health():
 def run_fastapi():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", loop="none")
-
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info", loop="none")
+    
 def main():
     # Initialise DB tables
     init_db()

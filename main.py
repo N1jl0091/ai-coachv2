@@ -10,6 +10,8 @@ from bot.telegram_bot import create_bot
 from strava.webhook import router as strava_router
 from db.models import init_db
 
+asyncio.set_event_loop(asyncio.new_event_loop())
+
 app = FastAPI(title="AI Coach Webhook Server")
 app.include_router(strava_router)
 
@@ -20,8 +22,9 @@ async def health():
 
 
 def run_fastapi():
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
-
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", loop="none")
 
 def main():
     # Initialise DB tables

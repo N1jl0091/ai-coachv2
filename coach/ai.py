@@ -4,7 +4,7 @@ Claude API calls. Handles message routing, tool use (Intervals write ops), and p
 """
 import os
 import json
-import anthropic
+from openai import AsyncOpenAI
 from typing import List
 from coach.context_builder import build_context
 from coach.system_prompt import build_system_prompt
@@ -16,8 +16,12 @@ from intervals.workouts import (
     delete_workout,
 )
 
-_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-MODEL = "claude-sonnet-4-20250514"
+_client = AsyncOpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=os.environ["GROQ_API_KEY"],
+)
+MODEL = "llama-3.1-8b-instant"
+
 
 # ── Tool definitions for Intervals.icu write operations ───────────────────────
 TOOLS = [

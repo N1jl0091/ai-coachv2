@@ -9,7 +9,7 @@ from intervals.client import IntervalsClient
 from intervals.workouts import _simplify_activity
 from coach.ai import analyse_activity
 from coach.context_builder import build_context
-from email.resend_client import send_analysis_email
+from notifications.resend_client import send_analysis_email
 from db.profile import get_profile_by_intervals_athlete_id
 
 

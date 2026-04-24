@@ -24,7 +24,7 @@ MODEL = "llama-3.1-8b-instant"
 
 
 # ── Tool definitions for Intervals.icu write operations ───────────────────────
-TTOOLS = [
+TOOLS = [
     {
         "type": "function",
         "function": {

@@ -14,17 +14,16 @@ VERIFY_TOKEN = os.environ.get("STRAVA_VERIFY_TOKEN", "ai_coach_verify")
 
 
 @router.get("/webhook")
-async def verify_webhook(
-    hub_mode: str = None,
-    hub_challenge: str = None,
-    hub_verify_token: str = None,
-):
-    """Strava calls this once to verify the webhook URL."""
+async def verify_webhook(request: Request):
+    params = request.query_params
+    hub_mode = params.get("hub.mode")
+    hub_challenge = params.get("hub.challenge")
+    hub_verify_token = params.get("hub.verify_token")
+
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         return {"hub.challenge": hub_challenge}
     raise HTTPException(status_code=403, detail="Verification failed")
-
-
+    
 @router.post("/webhook")
 async def receive_webhook(request: Request, background_tasks: BackgroundTasks):
     """Strava calls this on every activity event."""

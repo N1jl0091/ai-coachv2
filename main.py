@@ -5,6 +5,7 @@ Starts both the Telegram bot (polling) and the Strava webhook (FastAPI) in one p
 import asyncio
 import threading
 import uvicorn
+from telegram import Update
 from fastapi import FastAPI
 from bot.telegram_bot import create_bot
 from strava.webhook import router as strava_router
@@ -36,7 +37,14 @@ def main():
 
     # Start Telegram bot in main thread (blocking)
     bot = create_bot()
-    bot.run_polling(drop_pending_updates=True)
+    bot.run_polling(
+    drop_pending_updates=True,
+    allowed_updates=Update.ALL_TYPES,
+    connect_timeout=30,
+    read_timeout=30,
+    write_timeout=30,
+    pool_timeout=30,
+)
 
 
 if __name__ == "__main__":

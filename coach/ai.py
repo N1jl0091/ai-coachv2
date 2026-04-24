@@ -24,85 +24,86 @@ MODEL = "llama-3.1-8b-instant"
 
 
 # ── Tool definitions for Intervals.icu write operations ───────────────────────
-TOOLS = [
+TTOOLS = [
     {
-        "name": "create_workout",
-        "description": "Create a new workout on the athlete's Intervals.icu calendar.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
-                "sport": {"type": "string", "description": "e.g. Run, Ride, Swim"},
-                "name": {"type": "string"},
-                "description": {"type": "string"},
-                "duration_seconds": {"type": "integer"},
-                "target_tss": {"type": "number"},
-            },
-            "required": ["date", "sport", "name"],
-        },
-    },
-    {
-        "name": "update_workout",
-        "description": "Edit an existing workout on the Intervals.icu calendar.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "workout_id": {"type": "string"},
-                "name": {"type": "string"},
-                "description": {"type": "string"},
-                "duration_seconds": {"type": "integer"},
-                "target_tss": {"type": "number"},
-            },
-            "required": ["workout_id"],
-        },
-    },
-    {
-        "name": "move_workout",
-        "description": "Move an existing workout to a different date.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "workout_id": {"type": "string"},
-                "new_date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
-            },
-            "required": ["workout_id", "new_date"],
-        },
-    },
-    {
-        "name": "delete_workout",
-        "description": "Delete a workout from the Intervals.icu calendar.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "workout_id": {"type": "string"},
-            },
-            "required": ["workout_id"],
-        },
-    },
-    {
-        "name": "update_athlete_profile",
-        "description": (
-            "Update one or more fields in the athlete's stored profile. "
-            "Use when the athlete mentions an injury, limiter, availability change, etc."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "current_injuries": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Full updated list of current injuries",
+        "type": "function",
+        "function": {
+            "name": "create_workout",
+            "description": "Create a new workout on the athlete's Intervals.icu calendar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "sport": {"type": "string", "description": "e.g. Run, Ride, Swim"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "duration_seconds": {"type": "integer"},
+                    "target_tss": {"type": "number"},
                 },
-                "limiters": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Full updated list of current limiters",
+                "required": ["date", "sport", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_workout",
+            "description": "Edit an existing workout on the Intervals.icu calendar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workout_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "duration_seconds": {"type": "integer"},
+                    "target_tss": {"type": "number"},
                 },
-                "available_days": {
-                    "type": "array",
-                    "items": {"type": "string"},
+                "required": ["workout_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_workout",
+            "description": "Move an existing workout to a different date.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workout_id": {"type": "string"},
+                    "new_date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
                 },
-                "hours_per_week": {"type": "number"},
+                "required": ["workout_id", "new_date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_workout",
+            "description": "Delete a workout from the Intervals.icu calendar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "workout_id": {"type": "string"},
+                },
+                "required": ["workout_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_athlete_profile",
+            "description": "Update one or more fields in the athlete's stored profile.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "current_injuries": {"type": "array", "items": {"type": "string"}},
+                    "limiters": {"type": "array", "items": {"type": "string"}},
+                    "available_days": {"type": "array", "items": {"type": "string"}},
+                    "hours_per_week": {"type": "number"},
+                },
             },
         },
     },
@@ -123,17 +124,15 @@ async def get_coach_reply(
 
     # Build message list
     messages = list(session_history) + [{"role": "user", "content": user_message}]
-
-    response = _client.messages.create(
+    
+    response = await _client.chat.completions.create(
         model=MODEL,
-        max_tokens=1024,
-        system=system,
+        messages=[{"role": "system", "content": system}, *messages],
         tools=TOOLS,
-        messages=messages,
     )
 
     # Handle tool use
-    if response.stop_reason == "tool_use":
+    if response.choices[0].finish_reason == "tool_calls":
         reply, messages = await _handle_tool_use(
             telegram_id, response, messages, system
         )
@@ -150,34 +149,28 @@ async def _handle_tool_use(
     messages: List[dict],
     system: str,
 ) -> tuple[str, List[dict]]:
-    """Process tool calls and get the final text reply."""
     tool_results = []
 
-    for block in response.content:
-        if block.type != "tool_use":
-            continue
+    for choice in response.choices:
+        if choice.message.tool_calls:
+            for tool_call in choice.message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_input = json.loads(tool_call.function.arguments)
+                result = await _dispatch_tool(telegram_id, tool_name, tool_input)
+                tool_results.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(result),
+                })
 
-        tool_name = block.name
-        tool_input = block.input
-        result = await _dispatch_tool(telegram_id, tool_name, tool_input)
+    # Append assistant message and tool results
+    messages.append({"role": "assistant", "content": response.choices[0].message.content, "tool_calls": response.choices[0].message.tool_calls})
+    messages.extend(tool_results)
 
-        tool_results.append({
-            "type": "tool_result",
-            "tool_use_id": block.id,
-            "content": json.dumps(result),
-        })
-
-    # Append assistant turn (with tool use blocks) and tool results
-    messages.append({"role": "assistant", "content": response.content})
-    messages.append({"role": "user", "content": tool_results})
-
-    # Get final reply
-    follow_up = _client.messages.create(
+    follow_up = await _client.chat.completions.create(
         model=MODEL,
-        max_tokens=1024,
-        system=system,
+        messages=[{"role": "system", "content": system}, *messages],
         tools=TOOLS,
-        messages=messages,
     )
     reply = _extract_text(follow_up)
     messages.append({"role": "assistant", "content": reply})
@@ -207,11 +200,7 @@ async def _dispatch_tool(telegram_id: str, tool_name: str, tool_input: dict) -> 
 
 
 def _extract_text(response) -> str:
-    for block in response.content:
-        if hasattr(block, "text"):
-            return block.text
-    return "Sorry, I couldn't generate a response."
-
+    return response.choices[0].message.content or "Sorry, I couldn't generate a response."
 
 # ── Activity analysis (used by Strava webhook) ────────────────────────────────
 
@@ -240,11 +229,10 @@ Completed activity:
 {json.dumps(activity, indent=2)}
 
 Write the post-activity analysis."""
-
-    response = _client.messages.create(
+    
+    response = await _client.chat.completions.create(
         model=MODEL,
-        max_tokens=512,
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
     )
+    
     return _extract_text(response)

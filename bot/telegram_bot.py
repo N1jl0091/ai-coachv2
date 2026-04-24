@@ -23,25 +23,20 @@ from coach.ai import get_coach_reply
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Route free-form messages to Claude with full context."""
     user_id = str(update.effective_user.id)
     user_message = update.message.text
-
-    # Typing indicator
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id, action="typing"
-    )
-
-    session = get_session(user_id)
-    reply, updated_session = await get_coach_reply(
-        telegram_id=user_id,
-        user_message=user_message,
-        session_history=session["history"],
-    )
-    update_session(user_id, updated_session)
-
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    try:
+        session = get_session(user_id)
+        reply, updated_session = await get_coach_reply(
+            telegram_id=user_id,
+            user_message=user_message,
+            session_history=session["history"],
+        )
+        update_session(user_id, updated_session)
+    except Exception as e:
+        reply = f"Sorry, something went wrong: {str(e)}"
     await update.message.reply_text(reply, parse_mode="Markdown")
-
 
 def create_bot() -> Application:
     token = os.environ["TELEGRAM_BOT_TOKEN"]

@@ -212,14 +212,19 @@ async def _handle_tool_use(
     })
     messages.extend(tool_results)
 
-    follow_up = await _client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "system", "content": system}, *messages],
-        tools=TOOLS,
-    )
+    try:
+        follow_up = await _client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "system", "content": system}, *messages],
+            tools=TOOLS,
+        )
+    except Exception as e:
+        reply = "Done." if tool_results else f"Error: {str(e)}"
+        messages.append({"role": "assistant", "content": reply})
+        return reply, messages
+
     reply = _extract_text(follow_up)
     if not reply:
-        # Model returned empty — summarise what was done from tool results
         done = [json.loads(r["content"]) for r in tool_results]
         names = [d.get("name", "") for d in done if d.get("success")]
         reply = f"Done — added {', '.join(names)} to your calendar." if names else "Done."

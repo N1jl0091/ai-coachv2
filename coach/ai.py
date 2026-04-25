@@ -164,11 +164,14 @@ async def get_coach_reply(
     ]
     use_tools = any(word in user_message.lower() for word in action_keywords)
 
-    response = await _client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "system", "content": system}, *messages],
-        tools=TOOLS if use_tools else None,
-    )
+    try:
+        response = await _client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "system", "content": system}, *messages],
+            tools=TOOLS if use_tools else None,
+        )
+    except Exception as e:
+        return f"API error: {str(e)}", messages
 
     if response.choices[0].finish_reason == "tool_calls":
         reply, messages = await _handle_tool_use(
@@ -176,10 +179,11 @@ async def get_coach_reply(
         )
     else:
         reply = _extract_text(response)
+        if not reply:
+            reply = "Something went wrong — try again."
         messages.append({"role": "assistant", "content": reply})
 
     return reply, messages
-
 
 async def _handle_tool_use(
     telegram_id: str,

@@ -150,7 +150,10 @@ async def get_coach_reply(
         from coach.context_builder import build_deep_activity_context
         profile_dict, intervals_snapshot = await build_deep_activity_context(telegram_id)
     else:
-        profile_dict, intervals_snapshot = await build_context(telegram_id)
+        reply = _extract_text(response)
+        if not reply:
+            reply = "Something went wrong — try again."
+        messages.append({"role": "assistant", "content": reply})
 
     system = build_system_prompt(profile_dict, intervals_snapshot)
     messages = list(session_history) + [{"role": "user", "content": user_message}]
@@ -211,6 +214,11 @@ async def _handle_tool_use(
         tools=TOOLS,
     )
     reply = _extract_text(follow_up)
+    if not reply:
+        # Model returned empty — summarise what was done from tool results
+        done = [json.loads(r["content"]) for r in tool_results]
+        names = [d.get("name", "") for d in done if d.get("success")]
+        reply = f"Done — added {', '.join(names)} to your calendar." if names else "Done."
     messages.append({"role": "assistant", "content": reply})
     return reply, messages
 
@@ -239,8 +247,13 @@ async def _dispatch_tool(telegram_id: str, tool_name: str, tool_input: dict) -> 
 
 
 def _extract_text(response) -> str:
-    return response.choices[0].message.content or "Sorry, I couldn't generate a response."
-
+    try:
+        content = response.choices[0].message.content
+        if content and content.strip():
+            return content.strip()
+    except (IndexError, AttributeError):
+        pass
+    return None
 
 async def analyse_activity(
     activity: dict,

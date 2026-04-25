@@ -20,7 +20,7 @@ def get_session(telegram_id: str) -> dict:
     return _sessions[telegram_id]
 
 
-ef update_session(telegram_id: str, new_history: list):
+def update_session(telegram_id: str, new_history: list):
     trimmed = new_history[-MAX_HISTORY:]
     _sessions[telegram_id] = {"history": trimmed, "last_active": time.time()}
 

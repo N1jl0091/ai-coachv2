@@ -1,55 +1,41 @@
 """
 coach/system_prompt.py
-The coach personality. Injected as the SYSTEM message on every Claude call.
 """
+from datetime import date
 
 
 def build_system_prompt(profile: dict, intervals_snapshot: dict) -> str:
     profile_block = _format_profile(profile)
     intervals_block = _format_intervals(intervals_snapshot)
+    today = date.today().isoformat()
 
-    return f"""You are an experienced multi-sport endurance coach. You are direct, evidence-based, and you talk like a real coach — not a chatbot or assistant. No fluff, no over-explaining unless asked. You use the athlete's first name naturally.
+    return f"""You are an experienced multi-sport endurance coach. Today is {today}.
 
-You ask ONE clarifying question at a time when needed. You never fire a list of five questions.
+You are direct, concise, and proactive. You talk like a real coach texting an athlete — short, clear, no waffle. Use the athlete's first name naturally.
 
-## Your domain knowledge
-You deeply understand:
-- Periodisation (base, build, peak, taper phases)
-- CTL / ATL / TSB (chronic training load, acute training load, training stress balance)
-- Polarised, threshold, and pyramidal training models
-- RPE, TSS, IF, NP — and how to use them to guide training decisions
-- HR and power zone models (5-zone, 7-zone, Coggan, Karvonen)
-- Sport-specific load differences: swimming vs cycling vs running
-- Taper protocols for A-events
-- Race-day pacing and nutrition basics
-- Multi-sport athlete scheduling (triathlon, duathlon, general fitness)
-- Strength and gym work as adjunct training
-- Soccer, team sports load management
+## Communication rules
+- Keep responses under 100 words unless asked for a detailed plan
+- Never ask questions at the end of a response
+- Never ask for confirmation before acting — just do it and tell the athlete what you did
+- Don't explain your reasoning unless asked
+- No bullet point lists for casual conversation
+- If asked for a plan, create the workouts on the calendar immediately then confirm briefly
 
-## Wellness integration
-You proactively flag wellness issues before suggesting hard sessions:
-- If HRV is suppressed (below 7-day average): flag it, suggest easier session or rest
-- If sleep quality was poor (<7h or low quality score): note it, reduce intensity recommendation
-- If TSB is very negative (below -25): recommend a recovery day
-- If ramp rate exceeds 8 CTL/week: flag overreaching risk
-You connect the dots between wellness data and training — without the athlete having to ask.
+## Capabilities — act without asking permission
+- Create, edit, move, delete workouts on Intervals.icu
+- Update athlete profile when they mention injuries or availability changes
+When asked to plan a week — act immediately, then confirm what was added.
 
-## Intervals.icu capabilities
-You CAN directly modify the athlete's training calendar:
-- Create new workouts
-- Edit existing workouts (target, duration, description)
-- Move workouts to different dates
-- Delete workouts
+## Wellness rules (apply automatically)
+- HRV suppressed → suggest easy session or rest
+- Poor sleep (<7h or quality <3) → reduce intensity
+- TSB below -25 → recommend recovery
+- Ramp rate above 8 CTL/week → flag overreaching
 
-IMPORTANT: Always confirm before making any calendar change. Say what you plan to do and ask "Shall I do that?" before executing. Only proceed once the athlete confirms.
-
-## Guardrails (non-negotiable)
-- Never prescribe more than a 10% weekly volume increase
-- Flag ramp rates above 8 CTL/week as high risk
-- Always recommend a rest day if fatigue/ATL is very high
-- For injuries: acknowledge, modify the plan, suggest professional assessment if it's recurring or severe
-- Never diagnose medical conditions
-- Never recommend training through pain
+## Guardrails
+- Max 10% weekly volume increase
+- Injuries: modify plan, suggest professional help if recurring
+- Never diagnose or recommend training through pain
 
 ---
 
@@ -58,12 +44,12 @@ IMPORTANT: Always confirm before making any calendar change. Say what you plan t
 
 ---
 
-## Current Training Data (live from Intervals.icu)
+## Live Training Data
 {intervals_block}
 
 ---
 
-Respond conversationally. Be concise. When giving a plan or structured info, use simple formatting. Never use excessive bullet points for casual conversation.
+Be the coach. Take initiative. Act first, explain briefly after.
 """
 
 
@@ -81,10 +67,10 @@ def _format_profile(p: dict) -> str:
         f"Goal type: {p.get('goal_type', 'finish')}",
         f"Target time: {p.get('goal_time_target') or 'N/A'}",
         f"Experience: {p.get('experience_level', 'intermediate')}",
-        f"Current injuries: {', '.join(p.get('current_injuries') or []) or 'None'}",
+        f"Injuries: {', '.join(p.get('current_injuries') or []) or 'None'}",
         f"Limiters: {', '.join(p.get('limiters') or []) or 'None'}",
         f"Preferred long day: {p.get('preferred_long_day', 'Sunday')}",
-        f"Preferred intensity model: {p.get('preferred_intensity', 'mixed')}",
+        f"Intensity model: {p.get('preferred_intensity', 'mixed')}",
     ]
     return "\n".join(lines)
 
@@ -101,45 +87,55 @@ def _format_intervals(s: dict) -> str:
 
     lines = [
         "### Fitness & Load",
-        f"CTL (fitness): {fitness.get('ctl', 'N/A')}",
-        f"ATL (fatigue): {fitness.get('atl', 'N/A')}",
-        f"TSB (form): {fitness.get('tsb', 'N/A')}",
-        f"Ramp rate (7d): {fitness.get('ramp_rate', 'N/A')} CTL/week",
-        f"Training phase: {fitness.get('phase', 'N/A')}",
+        f"CTL: {fitness.get('ctl', 'N/A')} | ATL: {fitness.get('atl', 'N/A')} | TSB: {fitness.get('tsb', 'N/A')} | Ramp: {fitness.get('ramp_rate', 'N/A')}/week",
+        f"Phase: {fitness.get('phase', 'N/A')}",
         "",
-        "### Last 7 Days Workouts",
+        "### Last 7 Days",
     ]
-    for w in workouts:
-        lines.append(
-            f"- {w.get('date')} | {w.get('sport')} | {w.get('name')} | "
-            f"{w.get('duration_min')}min | TSS:{w.get('tss', '?')} | "
-            f"Avg HR:{w.get('avg_hr', '?')}"
-        )
+    if workouts:
+        for w in workouts:
+            lines.append(
+                f"- {w.get('date')} {w.get('sport')} {w.get('name')} "
+                f"{w.get('duration_min')}min TSS:{w.get('tss', '?')} HR:{w.get('avg_hr', '?')}"
+            )
+    else:
+        lines.append("- No recent workouts")
 
-    lines += ["", "### Planned Next 7 Days"]
-    for w in planned:
-        lines.append(
-            f"- {w.get('date')} | {w.get('sport')} | {w.get('name')} | "
-            f"~{w.get('duration_min')}min | {w.get('description', '')}"
-        )
+    lines += ["", "### Planned"]
+    if planned:
+        for w in planned:
+            lines.append(f"- {w.get('date')} {w.get('sport')} {w.get('name')} ~{w.get('duration_min')}min")
+    else:
+        lines.append("- Nothing planned")
 
-    lines += ["", "### Wellness (Last 7 Nights)"]
-    for night in wellness.get("sleep", []):
-        lines.append(
-            f"- {night.get('date')}: {night.get('hours')}h sleep, "
-            f"quality {night.get('quality', '?')}/5"
-        )
+    lines += ["", "### Wellness"]
+    for night in wellness.get("sleep", [])[-3:]:
+        lines.append(f"- {night.get('date')}: {night.get('hours')}h sleep quality {night.get('quality', '?')}/5")
 
     hrv = wellness.get("hrv_trend")
     rhr = wellness.get("rhr_trend")
     if hrv:
-        lines.append(f"HRV 7-day trend: {hrv}")
+        lines.append(f"HRV trend: {hrv}")
     if rhr:
-        lines.append(f"Resting HR 7-day trend: {rhr}")
+        lines.append(f"RHR trend: {rhr}")
 
     if events:
-        lines += ["", "### Upcoming Events"]
+        lines += ["", "### Events"]
         for e in events:
-            lines.append(f"- {e.get('date')} | {e.get('name')} | {e.get('priority', 'B')}-event")
+            lines.append(f"- {e.get('date')} {e.get('name')}")
+
+    detailed = s.get("detailed_activities", [])
+    if detailed:
+        lines += ["", "### Detailed Activity Breakdown"]
+        for a in detailed:
+            lines.append(f"**{a.get('date')} {a.get('name')}**")
+            lines.append(f"  Notes: {a.get('notes') or 'None'} | RPE: {a.get('perceived_exertion') or '?'} | Feel: {a.get('feel') or '?'}")
+            for lap in (a.get("laps") or [])[:10]:
+                lines.append(
+                    f"  Lap {lap.get('lap_index', '?')}: "
+                    f"{round((lap.get('elapsed_time', 0))/60, 1)}min "
+                    f"HR:{lap.get('average_heartrate', '?')} "
+                    f"Pace:{lap.get('average_speed', '?')}"
+                )
 
     return "\n".join(lines)

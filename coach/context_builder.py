@@ -111,3 +111,48 @@ def _profile_to_dict(profile) -> dict:
         "equipment": profile.equipment,
         "email": profile.email,
     }
+
+async def build_deep_activity_context(telegram_id: str) -> tuple[dict, dict]:
+    """
+    Same as build_context but fetches detailed recent activities with laps/notes.
+    Used when athlete asks for in-depth analysis.
+    """
+    from intervals.workouts import get_recent_workouts, get_activity_detail, get_planned_workouts
+    from intervals.wellness import get_wellness_snapshot
+
+    profile = get_profile(telegram_id)
+    profile_dict = _profile_to_dict(profile) if profile else {}
+
+    client = IntervalsClient()
+
+    fitness_task = asyncio.create_task(client.get_fitness())
+    wellness_task = asyncio.create_task(get_wellness_snapshot(client))
+    recent_task = asyncio.create_task(get_recent_workouts(client, days=14))  # 2 weeks
+    planned_task = asyncio.create_task(get_planned_workouts(client, days=14))
+    events_task = asyncio.create_task(client.get_events())
+
+    fitness, wellness, recent, planned, events = await asyncio.gather(
+        fitness_task, wellness_task, recent_task, planned_task, events_task,
+        return_exceptions=True,
+    )
+
+    # Fetch detailed laps for last 5 activities
+    detailed = []
+    if isinstance(recent, list):
+        detail_tasks = [
+            get_activity_detail(client, str(w["id"]))
+            for w in recent[-5:] if w.get("id")
+        ]
+        detailed = await asyncio.gather(*detail_tasks, return_exceptions=True)
+        detailed = [d for d in detailed if not isinstance(d, Exception)]
+
+    snapshot = {
+        "fitness": fitness if not isinstance(fitness, Exception) else {},
+        "wellness": wellness if not isinstance(wellness, Exception) else {},
+        "recent_workouts": recent if not isinstance(recent, Exception) else [],
+        "detailed_activities": detailed,
+        "planned_workouts": planned if not isinstance(planned, Exception) else [],
+        "events": events if not isinstance(events, Exception) else [],
+    }
+
+    return profile_dict, snapshot

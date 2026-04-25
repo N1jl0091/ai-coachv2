@@ -20,7 +20,7 @@ _client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=os.environ["GROQ_API_KEY"],
 )
-MODEL = "llama-3.1-8b-instant"
+MODEL = "llama-3.3-70b-versatile"
 
 
 # ── Tool definitions for Intervals.icu write operations ───────────────────────
@@ -115,9 +115,16 @@ async def get_coach_reply(
     user_message: str,
     session_history: List[dict],
 ) -> tuple[str, List[dict]]:
-    profile_dict, intervals_snapshot = await build_context(telegram_id)
-    system = build_system_prompt(profile_dict, intervals_snapshot)
+    deep_keywords = ["analyse", "analyze", "analysis", "in depth", "detail", "breakdown", "splits", "laps", "review"]
+    needs_deep = any(word in user_message.lower() for word in deep_keywords)
 
+    if needs_deep:
+        from coach.context_builder import build_deep_activity_context
+        profile_dict, intervals_snapshot = await build_deep_activity_context(telegram_id)
+    else:
+        profile_dict, intervals_snapshot = await build_context(telegram_id)
+
+    system = build_system_prompt(profile_dict, intervals_snapshot)
     messages = list(session_history) + [{"role": "user", "content": user_message}]
 
     action_keywords = ["add", "create", "move", "delete", "cancel", "schedule", "plan", "remove"]

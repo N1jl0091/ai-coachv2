@@ -127,3 +127,17 @@ def _simplify_event(e: dict) -> dict:
         "description": e.get("description", ""),
         "target_tss": (e.get("workout_doc") or {}).get("tss"),
     }
+    
+async def get_activity_detail(client: IntervalsClient, activity_id: str) -> dict:
+    """Full activity detail including laps, notes, streams summary."""
+    activity, laps = await asyncio.gather(
+        client.get_activity(activity_id),
+        client.get_activity_laps(activity_id),
+        return_exceptions=True,
+    )
+    result = _simplify_activity(activity) if not isinstance(activity, Exception) else {}
+    result["laps"] = laps if not isinstance(laps, Exception) else []
+    result["notes"] = activity.get("athlete_comments") if isinstance(activity, dict) else None
+    result["perceived_exertion"] = activity.get("perceived_exertion") if isinstance(activity, dict) else None
+    result["feel"] = activity.get("feel") if isinstance(activity, dict) else None
+    return result

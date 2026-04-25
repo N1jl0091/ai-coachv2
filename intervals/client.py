@@ -46,6 +46,14 @@ class IntervalsClient:
             r = await client.delete(url, auth=self._auth)
             r.raise_for_status()
             return r.status_code
+            
+    async def get_activity_streams(self, activity_id: str) -> dict:
+    """Get detailed streams: HR, pace, power, cadence by lap/split."""
+    return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/streams")
+
+    async def get_activity_laps(self, activity_id: str) -> dict:
+    """Get lap/split breakdown."""
+    return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/laps")
 
     # ── Fitness / wellness ────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ Per-conversation in-memory state. Resets when the process restarts or a new sess
 Keeps last N messages for context continuity within a session.
 """
 from typing import Dict, List
+import time
 
 _sessions: dict = {}
 MAX_HISTORY = 20

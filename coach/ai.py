@@ -20,7 +20,7 @@ _client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=os.environ["GROQ_API_KEY"],
 )
-MODEL = "deepseek-r1-distill-llama-70b"
+MODEL = "llama-3.1-8b-instant"
 
 
 # ── Tool definitions for Intervals.icu write operations ───────────────────────

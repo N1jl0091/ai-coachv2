@@ -226,6 +226,10 @@ async def setup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Setup cancelled. Run /setup when you're ready.")
     return ConversationHandler.END
 
+async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from bot.session import clear_session
+    clear_session(str(update.effective_user.id))
+    await update.message.reply_text("Fresh start. What's up?")
 
 def setup_conversation_handler() -> ConversationHandler:
     return ConversationHandler(

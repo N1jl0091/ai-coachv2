@@ -115,23 +115,20 @@ async def get_coach_reply(
     user_message: str,
     session_history: List[dict],
 ) -> tuple[str, List[dict]]:
-    """
-    Main entry point for the chat loop.
-    Returns (reply_text, updated_history).
-    """
     profile_dict, intervals_snapshot = await build_context(telegram_id)
     system = build_system_prompt(profile_dict, intervals_snapshot)
 
-    # Build message list
     messages = list(session_history) + [{"role": "user", "content": user_message}]
-    
+
+    action_keywords = ["add", "create", "move", "delete", "cancel", "schedule", "plan", "remove"]
+    use_tools = any(word in user_message.lower() for word in action_keywords)
+
     response = await _client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "system", "content": system}, *messages],
-        tools=TOOLS,
+        tools=TOOLS if use_tools else None,
     )
 
-    # Handle tool use
     if response.choices[0].finish_reason == "tool_calls":
         reply, messages = await _handle_tool_use(
             telegram_id, response, messages, system
@@ -209,9 +206,6 @@ async def analyse_activity(
     profile_dict: dict,
     intervals_snapshot: dict,
 ) -> str:
-    """
-    Generate a 200-300 word post-activity analysis email body.
-    """
     system = (
         "You are an experienced endurance coach writing a concise post-activity analysis. "
         "Be specific, data-driven, and actionable. 200-300 words. Use the athlete's first name. "
@@ -229,10 +223,10 @@ Completed activity:
 {json.dumps(activity, indent=2)}
 
 Write the post-activity analysis."""
-    
+
     response = await _client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
     )
-    
+
     return _extract_text(response)

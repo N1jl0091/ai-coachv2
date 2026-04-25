@@ -46,7 +46,8 @@ def create_bot() -> Application:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("profile", profile_command))
-
+    app.add_handler(CommandHandler("new", new_command))
+    
     # /setup conversational onboarding
     app.add_handler(setup_conversation_handler())
 

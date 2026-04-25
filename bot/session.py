@@ -5,20 +5,24 @@ Keeps last N messages for context continuity within a session.
 """
 from typing import Dict, List
 
-_sessions: Dict[str, dict] = {}
-MAX_HISTORY = 20  # messages (user+assistant pairs counted individually)
-
+_sessions: dict = {}
+MAX_HISTORY = 20
+SESSION_TIMEOUT = 7200  # 2 hours
 
 def get_session(telegram_id: str) -> dict:
-    if telegram_id not in _sessions:
-        _sessions[telegram_id] = {"history": []}
+    session = _sessions.get(telegram_id)
+    if not session:
+        _sessions[telegram_id] = {"history": [], "last_active": time.time()}
+        return _sessions[telegram_id]
+    # Auto-reset if inactive for 2 hours
+    if time.time() - session.get("last_active", 0) > SESSION_TIMEOUT:
+        _sessions[telegram_id] = {"history": [], "last_active": time.time()}
     return _sessions[telegram_id]
 
 
-def update_session(telegram_id: str, new_history: List[dict]):
-    """Replace the history for this user, trimming to MAX_HISTORY."""
+ef update_session(telegram_id: str, new_history: list):
     trimmed = new_history[-MAX_HISTORY:]
-    _sessions[telegram_id] = {"history": trimmed}
+    _sessions[telegram_id] = {"history": trimmed, "last_active": time.time()}
 
 
 def clear_session(telegram_id: str):

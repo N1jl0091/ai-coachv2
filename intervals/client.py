@@ -48,13 +48,12 @@ class IntervalsClient:
             return r.status_code
             
     async def get_activity_streams(self, activity_id: str) -> dict:
-    """Get detailed streams: HR, pace, power, cadence by lap/split."""
-    return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/streams")
+        """Get detailed streams: HR, pace, power, cadence by lap/split."""
+        return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/streams")
 
     async def get_activity_laps(self, activity_id: str) -> dict:
-    """Get lap/split breakdown."""
-    return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/laps")
-
+        """Get lap/split breakdown."""
+        return await self._get(f"/athlete/{self.athlete_id}/activities/{activity_id}/laps")
     # ── Fitness / wellness ────────────────────────────────────────────────────
 
     async def get_fitness(self) -> dict:

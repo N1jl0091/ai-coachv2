@@ -3,6 +3,7 @@ intervals/workouts.py
 Create, edit, move, and delete workouts on the Intervals.icu calendar.
 Also: fetch recent completed and planned workouts.
 """
+import asyncio
 from datetime import date, timedelta
 from intervals.client import IntervalsClient
 
@@ -26,7 +27,6 @@ def _normalise_sport(sport: str) -> str:
 
 
 async def get_recent_workouts(client: IntervalsClient, days: int = 7) -> list:
-    """Return completed workouts from the last N days, simplified."""
     oldest = (date.today() - timedelta(days=days)).isoformat()
     newest = date.today().isoformat()
     raw = await client.list_activities(oldest=oldest, newest=newest)
@@ -34,7 +34,6 @@ async def get_recent_workouts(client: IntervalsClient, days: int = 7) -> list:
 
 
 async def get_planned_workouts(client: IntervalsClient, days: int = 7) -> list:
-    """Return upcoming planned events/workouts for the next N days."""
     oldest = date.today().isoformat()
     newest = (date.today() + timedelta(days=days)).isoformat()
     raw = await client.get_events(oldest=oldest, newest=newest)
@@ -51,16 +50,16 @@ async def create_workout(
 ) -> dict:
     client = IntervalsClient()
     payload = {
-        "start_date_local": f"{date}T06:00:00",
+        "category": "WORKOUT",
+        "start_date_local": f"{date}T00:00:00",
         "type": _normalise_sport(sport),
         "name": name,
         "description": description,
-        "category": "WORKOUT",
     }
     if duration_seconds:
         payload["moving_time"] = duration_seconds
     if target_tss:
-        payload["workout_doc"] = {"tss": target_tss}
+        payload["icu_training_load"] = target_tss
 
     result = await client.create_event(payload)
     return {"success": True, "id": result.get("id"), "name": name, "date": date}
@@ -82,17 +81,15 @@ async def update_workout(
     if duration_seconds:
         updates["moving_time"] = duration_seconds
     if target_tss:
-        updates["workout_doc"] = {"tss": target_tss}
+        updates["icu_training_load"] = target_tss
 
-    result = await client.update_event(workout_id, updates)
+    await client.update_event(workout_id, updates)
     return {"success": True, "id": workout_id}
 
 
 async def move_workout(workout_id: str, new_date: str) -> dict:
     client = IntervalsClient()
-    result = await client.update_event(
-        workout_id, {"start_date_local": f"{new_date}T06:00:00"}
-    )
+    await client.update_event(workout_id, {"start_date_local": f"{new_date}T00:00:00"})
     return {"success": True, "id": workout_id, "new_date": new_date}
 
 
@@ -100,6 +97,20 @@ async def delete_workout(workout_id: str) -> dict:
     client = IntervalsClient()
     await client.delete_event(workout_id)
     return {"success": True, "id": workout_id}
+
+
+async def get_activity_detail(client: IntervalsClient, activity_id: str) -> dict:
+    activity, laps = await asyncio.gather(
+        client.get_activity(activity_id),
+        client.get_activity_laps(activity_id),
+        return_exceptions=True,
+    )
+    result = _simplify_activity(activity) if not isinstance(activity, Exception) else {}
+    result["laps"] = laps if not isinstance(laps, Exception) else []
+    result["notes"] = activity.get("athlete_comments") if isinstance(activity, dict) else None
+    result["perceived_exertion"] = activity.get("perceived_exertion") if isinstance(activity, dict) else None
+    result["feel"] = activity.get("feel") if isinstance(activity, dict) else None
+    return result
 
 
 def _simplify_activity(a: dict) -> dict:
@@ -127,17 +138,3 @@ def _simplify_event(e: dict) -> dict:
         "description": e.get("description", ""),
         "target_tss": (e.get("workout_doc") or {}).get("tss"),
     }
-    
-async def get_activity_detail(client: IntervalsClient, activity_id: str) -> dict:
-    """Full activity detail including laps, notes, streams summary."""
-    activity, laps = await asyncio.gather(
-        client.get_activity(activity_id),
-        client.get_activity_laps(activity_id),
-        return_exceptions=True,
-    )
-    result = _simplify_activity(activity) if not isinstance(activity, Exception) else {}
-    result["laps"] = laps if not isinstance(laps, Exception) else []
-    result["notes"] = activity.get("athlete_comments") if isinstance(activity, dict) else None
-    result["perceived_exertion"] = activity.get("perceived_exertion") if isinstance(activity, dict) else None
-    result["feel"] = activity.get("feel") if isinstance(activity, dict) else None
-    return result

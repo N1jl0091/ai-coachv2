@@ -31,6 +31,54 @@ _client = AsyncOpenAI(
 MODEL = "llama-3.3-70b-versatile"
 
 # ------------------------
+# SPORT NORMALIZATION (FIX)
+# ------------------------
+
+def _normalize_args(tool_name: str, args: dict) -> dict:
+    """
+    Prevents Groq tool-call failures by enforcing valid sport values.
+    """
+
+    if "sport" in args and args["sport"]:
+        mapping = {
+            # running
+            "run": "Run",
+            "running": "Run",
+            "jog": "Run",
+            "jogging": "Run",
+
+            # cycling
+            "ride": "Ride",
+            "cycling": "Ride",
+            "bike": "Ride",
+            "biking": "Ride",
+
+            # swimming
+            "swim": "Swim",
+            "swimming": "Swim",
+
+            # strength
+            "gym": "Strength",
+            "strength": "Strength",
+            "weights": "Strength",
+            "lifting": "Strength",
+
+            # other sports
+            "football": "Other",
+            "soccer": "Other",
+            "rugby": "Other",
+            "tennis": "Other",
+            "hockey": "Other",
+            "walk": "Other",
+            "hike": "Other",
+        }
+
+        args["sport"] = mapping.get(str(args["sport"]).lower(), "Other")
+
+    return args
+
+
+# ------------------------
 # TOOL DEFINITIONS
 # ------------------------
 
@@ -44,7 +92,10 @@ TOOLS = [
                 "type": "object",
                 "properties": {
                     "date": {"type": "string"},
-                    "sport": {"type": "string"},
+                    "sport": {
+                        "type": "string",
+                        "enum": ["Run", "Ride", "Swim", "Strength", "Other"]
+                    },
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "duration_seconds": {"type": "integer"},
@@ -58,16 +109,19 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "create_structured_workout",
-            "description": "Create a structured workout (intervals, tempo, etc). Always prefer description_override.",
+            "description": "Create structured workout with intervals.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "date": {"type": "string"},
-                    "sport": {"type": "string"},
+                    "sport": {
+                        "type": "string",
+                        "enum": ["Run", "Ride", "Swim", "Strength", "Other"]
+                    },
                     "name": {"type": "string"},
                     "description_override": {"type": "string"},
                 },
-                "required": ["date", "sport", "name"],
+                "required": ["date", "sport", "name", "description_override"],
             },
         },
     },
@@ -132,6 +186,7 @@ TOOLS = [
     },
 ]
 
+
 # ------------------------
 # MAIN ENTRY
 # ------------------------
@@ -142,19 +197,15 @@ async def get_coach_reply(
     session_history: List[dict],
 ) -> Tuple[str, List[dict]]:
 
-    # 1. Build context (ALWAYS first)
     profile_dict, intervals_snapshot = await build_context(telegram_id)
     system = build_system_prompt(profile_dict, intervals_snapshot)
 
-    # 2. Build message stack
     messages = list(session_history) + [
         {"role": "user", "content": user_message}
     ]
 
-    # 3. Decide tool usage
     use_tools = _should_use_tools(user_message)
 
-    # 4. First model call
     try:
         response = await _client.chat.completions.create(
             model=MODEL,
@@ -164,7 +215,6 @@ async def get_coach_reply(
     except Exception as e:
         return f"API error: {str(e)}", messages
 
-    # 5. Tool handling or normal reply
     if _has_tool_calls(response):
         return await _handle_tool_flow(
             telegram_id, response, messages, system
@@ -191,7 +241,11 @@ async def _handle_tool_flow(
 
     for tool_call in response.choices[0].message.tool_calls:
         name = tool_call.function.name
+
         args = json.loads(tool_call.function.arguments)
+
+        # ✅ FIX APPLIED HERE
+        args = _normalize_args(name, args)
 
         result = await _dispatch_tool(telegram_id, name, args)
 
@@ -201,7 +255,6 @@ async def _handle_tool_flow(
             "content": json.dumps(result),
         })
 
-    # Append assistant tool request
     messages.append({
         "role": "assistant",
         "content": response.choices[0].message.content,
@@ -210,17 +263,11 @@ async def _handle_tool_flow(
 
     messages.extend(tool_messages)
 
-    # Follow-up call
-    try:
-        follow_up = await _client.chat.completions.create(
-            model=MODEL,
-            messages=[{"role": "system", "content": system}, *messages],
-            tools=TOOLS,
-        )
-    except Exception as e:
-        reply = f"Tool executed but follow-up failed: {str(e)}"
-        messages.append({"role": "assistant", "content": reply})
-        return reply, messages
+    follow_up = await _client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "system", "content": system}, *messages],
+        tools=TOOLS,
+    )
 
     reply = _extract_text(follow_up) or "Done."
     messages.append({"role": "assistant", "content": reply})
@@ -232,12 +279,7 @@ async def _handle_tool_flow(
 # TOOL DISPATCH
 # ------------------------
 
-async def _dispatch_tool(
-    telegram_id: str,
-    tool_name: str,
-    tool_input: dict
-) -> dict:
-
+async def _dispatch_tool(telegram_id: str, tool_name: str, tool_input: dict) -> dict:
     try:
         if tool_name == "create_workout":
             return await create_workout(**tool_input)
@@ -286,8 +328,7 @@ def _has_tool_calls(response) -> bool:
 def _should_use_tools(message: str) -> bool:
     keywords = [
         "add", "create", "move", "delete",
-        "schedule", "plan", "remove",
-        "interval", "tempo", "workout"
+        "schedule", "plan", "workout", "session"
     ]
     return any(k in message.lower() for k in keywords)
 
@@ -296,33 +337,17 @@ def _should_use_tools(message: str) -> bool:
 # ACTIVITY ANALYSIS
 # ------------------------
 
-async def analyse_activity(
-    activity: dict,
-    profile_dict: dict,
-    intervals_snapshot: dict,
-) -> str:
+async def analyse_activity(activity: dict, profile_dict: dict, intervals_snapshot: dict) -> str:
 
     system = (
-        "You are an endurance coach. Write a concise, data-driven analysis "
-        "(200–300 words). Include: performance, pacing, recovery, next steps."
+        "You are an endurance coach. Write a concise 200–300 word analysis."
     )
-
-    prompt = f"""
-Profile:
-{json.dumps(profile_dict, indent=2)}
-
-Fitness:
-{json.dumps(intervals_snapshot.get('fitness', {}), indent=2)}
-
-Activity:
-{json.dumps(activity, indent=2)}
-"""
 
     response = await _client.chat.completions.create(
         model=MODEL,
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": json.dumps(activity)},
         ],
     )
 

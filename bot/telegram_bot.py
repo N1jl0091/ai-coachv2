@@ -17,6 +17,7 @@ from bot.commands import (
     status_command,
     profile_command,
     setup_conversation_handler,
+    new_command,
 )
 from bot.session import get_session, update_session
 from coach.ai import get_coach_reply

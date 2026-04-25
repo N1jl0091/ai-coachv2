@@ -39,7 +39,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"Welcome back, {profile.name}! 👋\n\n"
             "Just talk to me — ask about your training, request plan changes, or check your status.\n\n"
-            "Commands:\n/status — today's snapshot\n/profile — view/edit your profile\n/setup — redo onboarding"
+            "Commands:\n/status — today's snapshot\n/profile — view/edit your profile\n/setup — redo onboarding\n/new — fresh conversation"
         )
     else:
         await update.message.reply_text(

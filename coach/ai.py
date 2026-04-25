@@ -1,6 +1,5 @@
 """
 coach/ai.py
-Claude API calls. Handles message routing, tool use (Intervals write ops), and profile updates.
 """
 import os
 import json
@@ -11,6 +10,7 @@ from coach.system_prompt import build_system_prompt
 from db.profile import get_profile, patch_profile
 from intervals.workouts import (
     create_workout,
+    create_structured_workout,
     update_workout,
     move_workout,
     delete_workout,
@@ -22,14 +22,12 @@ _client = AsyncOpenAI(
 )
 MODEL = "llama-3.3-70b-versatile"
 
-
-# ── Tool definitions for Intervals.icu write operations ───────────────────────
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "create_workout",
-            "description": "Create a new workout on the athlete's Intervals.icu calendar.",
+            "description": "Create a simple unstructured workout on the athlete's Intervals.icu calendar.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -39,6 +37,36 @@ TOOLS = [
                     "description": {"type": "string"},
                     "duration_seconds": {"type": "integer"},
                     "target_tss": {"type": "number"},
+                },
+                "required": ["date", "sport", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_structured_workout",
+            "description": (
+                "Create a structured workout with steps on the Intervals.icu calendar. "
+                "Use this for any interval, fartlek, tempo, or structured session. "
+                "Always use description_override with full Intervals.icu plain text format. "
+                "Format rules: steps start with '-', duration e.g. 10m/30s/1m30, "
+                "power e.g. 80% or Z2 or 100w or Ramp 60-80%, "
+                "HR e.g. Z2 HR or 75% HR, pace e.g. Z2 Pace or 4:30/km, "
+                "cadence e.g. 90rpm, repeats e.g. '6x' on line before steps, "
+                "text before duration becomes step label. "
+                "Example: 'Warmup\\n- 10m Z1 Pace\\n\\nMain set 6x\\n- 1m Z4 Pace\\n- 2m Z1 Pace\\n\\nCooldown\\n- 10m Z1 Pace'"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "sport": {"type": "string", "description": "e.g. Run, Ride, Swim"},
+                    "name": {"type": "string"},
+                    "warmup_mins": {"type": "integer", "description": "Warmup minutes if not using description_override"},
+                    "main_set": {"type": "string", "description": "Main set in Intervals plain text format"},
+                    "cooldown_mins": {"type": "integer", "description": "Cooldown minutes if not using description_override"},
+                    "description_override": {"type": "string", "description": "Full workout in Intervals.icu plain text format — use this for full control"},
                 },
                 "required": ["date", "sport", "name"],
             },
@@ -127,7 +155,10 @@ async def get_coach_reply(
     system = build_system_prompt(profile_dict, intervals_snapshot)
     messages = list(session_history) + [{"role": "user", "content": user_message}]
 
-    action_keywords = ["add", "create", "move", "delete", "cancel", "schedule", "plan", "remove"]
+    action_keywords = [
+        "add", "create", "move", "delete", "cancel", "schedule", "plan", "remove",
+        "interval", "fartlek", "tempo", "structured", "workout", "session", "training"
+    ]
     use_tools = any(word in user_message.lower() for word in action_keywords)
 
     response = await _client.chat.completions.create(
@@ -167,8 +198,11 @@ async def _handle_tool_use(
                     "content": json.dumps(result),
                 })
 
-    # Append assistant message and tool results
-    messages.append({"role": "assistant", "content": response.choices[0].message.content, "tool_calls": response.choices[0].message.tool_calls})
+    messages.append({
+        "role": "assistant",
+        "content": response.choices[0].message.content,
+        "tool_calls": response.choices[0].message.tool_calls,
+    })
     messages.extend(tool_results)
 
     follow_up = await _client.chat.completions.create(
@@ -182,10 +216,11 @@ async def _handle_tool_use(
 
 
 async def _dispatch_tool(telegram_id: str, tool_name: str, tool_input: dict) -> dict:
-    """Route tool calls to the appropriate function."""
     try:
         if tool_name == "create_workout":
             result = await create_workout(**tool_input)
+        elif tool_name == "create_structured_workout":
+            result = await create_structured_workout(**tool_input)
         elif tool_name == "update_workout":
             result = await update_workout(**tool_input)
         elif tool_name == "move_workout":
@@ -206,7 +241,6 @@ async def _dispatch_tool(telegram_id: str, tool_name: str, tool_input: dict) -> 
 def _extract_text(response) -> str:
     return response.choices[0].message.content or "Sorry, I couldn't generate a response."
 
-# ── Activity analysis (used by Strava webhook) ────────────────────────────────
 
 async def analyse_activity(
     activity: dict,

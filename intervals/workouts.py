@@ -112,6 +112,39 @@ async def get_activity_detail(client: IntervalsClient, activity_id: str) -> dict
     result["feel"] = activity.get("feel") if isinstance(activity, dict) else None
     return result
 
+async def create_structured_workout(
+    date: str,
+    sport: str,
+    name: str,
+    warmup_mins: int = None,
+    main_set: str = None,
+    cooldown_mins: int = None,
+    description_override: str = None,
+) -> dict:
+    client = IntervalsClient()
+
+    if description_override:
+        description = description_override
+    else:
+        parts = []
+        if warmup_mins:
+            parts.append(f"Warmup\n- {warmup_mins}m Z1\n")
+        if main_set:
+            parts.append(f"Main set\n{main_set}\n")
+        if cooldown_mins:
+            parts.append(f"Cooldown\n- {cooldown_mins}m Z1\n")
+        description = "\n".join(parts)
+
+    payload = {
+        "category": "WORKOUT",
+        "start_date_local": f"{date}T00:00:00",
+        "type": _normalise_sport(sport),
+        "name": name,
+        "description": description,
+    }
+
+    result = await client.create_event(payload)
+    return {"success": True, "id": result.get("id"), "name": name, "date": date}
 
 def _simplify_activity(a: dict) -> dict:
     return {

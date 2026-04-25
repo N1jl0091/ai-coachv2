@@ -37,7 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_session(user_id, updated_session)
     except Exception as e:
         reply = f"Sorry, something went wrong: {str(e)}"
-    await update.message.reply_text(reply, parse_mode="Markdown")
+    await update.message.reply_text(reply)
 
 def create_bot() -> Application:
     token = os.environ["TELEGRAM_BOT_TOKEN"]

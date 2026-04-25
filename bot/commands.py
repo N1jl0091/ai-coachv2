@@ -63,7 +63,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=update.effective_chat.id, action="typing"
     )
     status_text = await build_quick_status(user_id)
-    await update.message.reply_text(status_text, parse_mode="Markdown")
+    await update.message.reply_text(status_text)
 
 
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +74,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = (
-        f"*Your Profile*\n\n"
+        f"Your Profile\n\n"
         f"Name: {profile.name}\n"
         f"Age: {profile.age}\n"
         f"Sports: {', '.join(profile.sports or [])}\n"
@@ -86,9 +86,9 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Experience: {profile.experience_level}\n"
         f"Injuries: {', '.join(profile.current_injuries or []) or 'None'}\n"
         f"Limiters: {', '.join(profile.limiters or []) or 'None'}\n\n"
-        "To update anything, just tell me — e.g. 'I hurt my left knee' or 'I can only train 4 days this week'."
+        "To update anything, just tell me."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text)
 
 
 # ── /setup conversational onboarding ──────────────────────────────────────────
@@ -214,10 +214,9 @@ async def setup_experience(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     name = context.user_data.get("name", "there")
     await update.message.reply_text(
-        f"Profile saved, {name}! 🎉\n\n"
+        f"Profile saved, {name}!\n\n"
         "You're all set. Just talk to me naturally — ask anything about your training.\n\n"
-        "Try: _'What should I do today?'_ or _'Plan my week'_",
-        parse_mode="Markdown",
+        "Try: 'What should I do today?' or 'Plan my week'",
     )
     return ConversationHandler.END
 
